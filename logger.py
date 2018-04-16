@@ -21,8 +21,8 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 SERIAL_PORT = "/dev/ttyACM0"
-FIELD_NUM = 17
-TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1, RC2, RC3, VOL, CUR, POWER = range(17)
+FIELD_NUM = 18
+TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1, RC2, RC3, VOL, CUR_RAW, CUR, POWER = range(FIELD_NUM)
 
 
 class AeroEnergyLogger(object):
@@ -31,7 +31,7 @@ class AeroEnergyLogger(object):
 		self.ser = serial.Serial(SERIAL_PORT, 9600)
 
 		self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
-		self.log_file.write("timestamp, vel_x, vel_y, vel_z, acc_x, acc_y, acc_z, roll, pitch, yaw, rc0, rc1, rc2, rc3, vol, cur, power\n")
+		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power\n")
 
 		rospy.init_node('aero_energy_logger')
 
@@ -41,7 +41,6 @@ class AeroEnergyLogger(object):
 		self.manual_control = ManualControl()
 		self.battery_state = BatteryState()
 		self.pose = PoseStamped()
-		self.current = None
 
 		self.cur_val_list = [0] * FIELD_NUM
 
@@ -100,12 +99,15 @@ class AeroEnergyLogger(object):
 		self.cur_val_list[YAW] = yaw
 
 	def update_current(self, raw_value):
-		vol = (raw_value / 1024.0) * 5000
-		amps = ((vol - 2500) / 100)
-		self.current = amps
+		self.cur_val_list[TIMESTAMP] = time.time() - self.start_time
+		self.cur_val_list[CUR_RAW] = raw_value
+		
+		# vol = (raw_value / 1024.0) * 5000
+		# amps = ((vol - 2500) / 100)
+		# self.current = amps
 
-		self.cur_val_list[CUR] = self.current
-		self.cur_val_list[POWER] = self.cur_val_list[VOL] * self.cur_val_list[CUR]
+		# self.cur_val_list[CUR] = self.current
+		# self.cur_val_list[POWER] = self.cur_val_list[VOL] * self.cur_val_list[CUR]
 
 		self.cur_val_list = [str(x) for x in self.cur_val_list]
 
