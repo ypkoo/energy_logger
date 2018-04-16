@@ -13,6 +13,13 @@ from sensor_msgs.msg import Imu, BatteryState
 from mavros_msgs.msg import *
 from tf.transformations import euler_from_quaternion
 
+import sys, signal
+def signal_handler(signal, frame):
+	print("\nprogram exiting gracefully")
+	sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
 SERIAL_PORT = "/dev/ttyACM0"
 FIELD_NUM = 17
 TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1, RC2, RC3, VOL, CUR, POWER = range(17)
@@ -24,7 +31,7 @@ class AeroEnergyLogger(object):
 		self.ser = serial.Serial(SERIAL_PORT, 9600)
 
 		self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
-		self.log_file.write("timestamp, raw_current, velocity_x\n")
+		self.log_file.write("timestamp, vel_x, vel_y, vel_z, acc_x, acc_y, acc_z, roll, pitch, yaw, rc0, rc1, rc2, rc3, vol, cur, power\n")
 
 		rospy.init_node('aero_energy_logger')
 
@@ -46,7 +53,7 @@ class AeroEnergyLogger(object):
 		rospy.Subscriber("/mavros/imu/data", Imu, self.imu_callback)
 		rospy.Subscriber("/mavros/manual_control/control", ManualControl, self.manual_control_callback)
 		rospy.Subscriber("/mavros/rc/in", RCIn, self.rc_in_callback)
-		rospy.Subscriber("/mavros/local_postion/pose", PoseStamped, self.pose_callback)
+		rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.pose_callback)
 
 
 	def velocity_callback(self, velocity):
@@ -86,7 +93,7 @@ class AeroEnergyLogger(object):
 		s[ACC_Z] = self.imu.linear_acceleration.z
 
 		orientation = self.pose.pose.orientation
-		qs = [orientation.x, orientation.y, orientation.z, orientation.w]
+		qs = (orientation.x, orientation.y, orientation.z, orientation.w)
 		roll, pitch, yaw = euler_from_quaternion(qs)
 
 		s[ROLL] = roll
@@ -108,10 +115,19 @@ class AeroEnergyLogger(object):
 
 if __name__ == '__main__':
 	logger = AeroEnergyLogger()
+	time.sleep(3)
+
 
 	while True:
 		current_raw = logger.ser.readline().strip()
-		logger.update_current(float(current_raw))
+		try:
+			logger.update_current(int(current_raw))
+		except KeyboardInterrupt:
+			print('interrupted!')
+			break
+		except:
+			continue
 		logger.write_log()
 
-
+	
+	sys.exit()
