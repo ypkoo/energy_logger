@@ -54,7 +54,7 @@ class AeroEnergyLogger(object):
 		rospy.Subscriber("/mavros/imu/data", Imu, self.imu_callback)
 		rospy.Subscriber("/mavros/manual_control/control", ManualControl, self.manual_control_callback)
 		rospy.Subscriber("/mavros/rc/in", RCIn, self.rc_in_callback)
-		rospy.Subscriber("/mavros/local_postion/pose", PoseStamped, self.pose_callback)
+		rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.pose_callback)
 
 
 	def velocity_callback(self, velocity):
@@ -89,6 +89,7 @@ class AeroEnergyLogger(object):
 
 	def pose_callback(self, pose):
 		self.pose = pose
+		print self.pose
 
 		orientation = self.pose.pose.orientation
 		qs = [orientation.x, orientation.y, orientation.z, orientation.w]
