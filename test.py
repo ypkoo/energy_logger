@@ -5,12 +5,17 @@
 
 import rospy
 import roslib
+import mavros
+import random
 
 import time, serial, datetime
 
-from geometry_msgs.msg import TwistStamped, PoseStamped
+from geometry_msgs.msg import TwistStamped, PoseStamped, Vector3
 from sensor_msgs.msg import Imu, BatteryState
 from mavros_msgs.msg import *
+from mavros_msgs.srv import *
+
+# from mavros.srv import *
 from tf.transformations import euler_from_quaternion
 
 import sys, signal
@@ -28,13 +33,14 @@ TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1,
 class AeroEnergyLogger(object):
 
 	def __init__(self):
-		self.ser = serial.Serial(SERIAL_PORT, 9600)
+		# self.ser = serial.Serial(SERIAL_PORT, 9600)
 
-		self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
-		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power\n")
-
+		# self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
+		# self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power\n")
+		mavros.set_namespace()
 		rospy.init_node('aero_energy_logger')
 
+		self.cur_state = State()
 		self.velocity = TwistStamped()
 		self.rc_in = RCIn()
 		self.imu = Imu()
@@ -44,12 +50,16 @@ class AeroEnergyLogger(object):
 
 		self.cur_val_list = [0] * FIELD_NUM
 
+		print "init Subscribers..."
 		self.init_subscribers()
+		print "init Publishers..."
+		self.init_services()
 		self.init_publishers()
 
 		self.start_time = time.time()
 
 	def init_subscribers(self):
+		rospy.Subscriber(mavros.get_topic('state'), State, self.state_callback)
 		rospy.Subscriber("/mavros/local_position/velocity", TwistStamped, self.velocity_callback)
 		rospy.Subscriber("/mavros/battery", BatteryState, self.battery_state_callback)
 		rospy.Subscriber("/mavros/imu/data", Imu, self.imu_callback)
@@ -57,9 +67,20 @@ class AeroEnergyLogger(object):
 		rospy.Subscriber("/mavros/rc/in", RCIn, self.rc_in_callback)
 		rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.pose_callback)
 
-	def init_publishers(self):
-		self.set_vel_publisher = rospy.Publisher('/mavros/setpoint_raw/local', PositionTarget, queue_size=10)
+	def init_services(self):
+		rospy.wait_for_service(mavros.get_topic('cmd', 'arming'))
+		rospy.wait_for_service(mavros.get_topic('set_mode'))
+		rospy.wait_for_service(mavros.get_topic('cmd', 'takeoff'))
+		self.arming_client = rospy.ServiceProxy(mavros.get_topic('cmd', 'arming'), CommandBool)
+		self.set_mode_client = rospy.ServiceProxy(mavros.get_topic('set_mode'), SetMode)
+		self.takeoff_client = rospy.ServiceProxy(mavros.get_topic('cmd', 'takeoff'), CommandTOL)
 
+	def init_publishers(self):
+		self.set_vel_pub = rospy.Publisher('/mavros/setpoint_raw/local', PositionTarget, queue_size=10)
+		self.local_pos_pub = rospy.Publisher(mavros.get_topic('setpoint_position', 'local'), PoseStamped, queue_size=10)
+
+	def state_callback(self, state):
+		self.cur_state = state
 
 	def velocity_callback(self, velocity):
 		self.velocity = velocity
@@ -93,7 +114,7 @@ class AeroEnergyLogger(object):
 
 	def pose_callback(self, pose):
 		self.pose = pose
-		print self.pose
+		# print self.pose
 
 		orientation = self.pose.pose.orientation
 		qs = [orientation.x, orientation.y, orientation.z, orientation.w]
@@ -153,11 +174,11 @@ class AeroEnergyLogger(object):
 
 		return ",".join(s)
 
-	def pub_setpoint_velocity(vx, vy, vz=0):
+	def pub_setpoint_velocity(self, vx, vy, vz=0):
 
 		pos_target = PositionTarget()
 		pos_target.coordinate_frame = 8 # FRAME_BODY_NED
-		pos_target.target_mask = 4039
+		pos_target.type_mask = 4039
 
 		vel = Vector3()
 		vel.x = vx
@@ -166,23 +187,112 @@ class AeroEnergyLogger(object):
 
 		pos_target.velocity = vel
 
-		self.set_vel_publisher.publish(pos_target)
+		self.set_vel_pub.publish(pos_target)
+
+	def pub_local_position(self, x, y, z):
+
+		print x, y, z
+
+		pose = PoseStamped()
+		pose.pose.position.x = x
+		pose.pose.position.y = y
+		pose.pose.position.z = z
+
+		self.local_pos_pub.publish(pose)
+
+	def takeoff(self):
+		self.pub_local_position(0, 0, 2)
+
+	def set_mode(self, mode):
+		mode = SetMode()
+		mode.base_mode = 0
+		mode. custom_mode = "OFFBOARD"
+
+	def print_status(self):
+		print "velocity", self.velocity.twist.linear.x, self.velocity.twist.linear.y, self.velocity.twist.linear.z
+
 
 
 if __name__ == '__main__':
 	logger = AeroEnergyLogger()
 	time.sleep(3)
+	rate = rospy.Rate(20.0)
+	prev_state = logger.cur_state
 
 
-	while True:
-		current_raw = logger.ser.readline().strip()
+	# # wait for FCU connection
+	# while not logger.cur_state.connected:
+	# 	rate.sleep()
+
+	for i in range(100):
+		logger.takeoff()
+
+		rate.sleep()
+
+	last_request = rospy.get_rostime()
+	print "enabling offboard..."
+	print logger.cur_state.mode
+	while logger.cur_state.mode != "OFFBOARD":
+		time.sleep(1)
+		logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+
+	print "offboard enabled"
+
+	# print "arming..."
+	# while not logger.cur_state.armed:
+	# 	logger.arming_client(True)
+
+	# print "vehicle armed"
+
+	# logger.takeoff()
+	# rate.sleep()
+
+	# logger.pub_setpoint_velocity(2.0, 0.0, 0.0)
+	# rate.sleep()
+
+	last_request = rospy.get_rostime()
+
+	while not rospy.is_shutdown():
+		time.sleep(1)
+		now = rospy.get_rostime()
+		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
+			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+			last_request = now 
+		else:
+			if not logger.cur_state.armed and (now - last_request > rospy.Duration(5.)):
+				logger.arming_client(True)
+				last_request = now 
+
+		if prev_state.armed != logger.cur_state.armed:
+			rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
+		if prev_state.mode != logger.cur_state.mode: 
+			rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
+		prev_state = logger.cur_state
+
+
 		try:
-			logger.update_current(int(current_raw))
+			vx = random.randrange(-5,5)
+			vy = random.randrange(-5,5)
+			logger.pub_setpoint_velocity(vx, vy, 0.0)
+			# logger.print_status()
 		except KeyboardInterrupt:
 			print('interrupted!')
 			break
 		except:
 			continue
+		# logger.write_log()
+		rate.sleep()
+
+	# while True:
+		
+	# 	try:
+	# 		logger.pub_setpoint_velocity(1.0, 0.0, 0.0)
+	# 		logger.print_status()
+	# 	except KeyboardInterrupt:
+	# 		print('interrupted!')
+	# 		break
+	# 	except:
+	# 		continue
 		# logger.write_log()
 
 	
