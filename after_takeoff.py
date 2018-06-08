@@ -26,17 +26,22 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 SERIAL_PORT = "/dev/ttyACM0"
-FIELD_NUM = 18
-TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1, RC2, RC3, VOL, CUR_RAW, CUR, POWER = range(FIELD_NUM)
+FIELD_NUM = 21
+TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1, RC2, RC3, VOL, CUR_RAW, CUR, POWER, ACT_VX, ACT_VY, ACT_VZ = range(FIELD_NUM)
 
+class Action(object):
+
+	def __init__(self, vx=0, vy=0):
+		self.vx = vx
+		self.vy = vy
 
 class AeroEnergyLogger(object):
 
 	def __init__(self):
-		# self.ser = serial.Serial(SERIAL_PORT, 9600)
+		self.ser = serial.Serial(SERIAL_PORT, 9600)
 
-		# self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
-		# self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power\n")
+		self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
+		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power\n")
 		mavros.set_namespace()
 		rospy.init_node('aero_energy_logger')
 
@@ -47,13 +52,15 @@ class AeroEnergyLogger(object):
 		self.manual_control = ManualControl()
 		self.battery_state = BatteryState()
 		self.pose = PoseStamped()
+		self.action = Action()
 
 		self.cur_val_list = [0] * FIELD_NUM
 
-		print "init Subscribers..."
+		print "initialize subscribers..."
 		self.init_subscribers()
-		print "init Publishers..."
+		print "initialize services..."
 		self.init_services()
+		print "initialize publishers..."
 		self.init_publishers()
 
 		self.start_time = time.time()
@@ -152,6 +159,9 @@ class AeroEnergyLogger(object):
 		s[ACC_Z] = self.imu.linear_acceleration.x
 		s[ACC_Y] = self.imu.linear_acceleration.y
 		s[ACC_Z] = self.imu.linear_acceleration.z
+		s[ACT_VX] = self.action.vx
+		s[ACT_VY] = self.action.vy
+		s[ACT_VZ] = self.action.vz
 
 		orientation = self.pose.pose.orientation
 		qs = [orientation.x, orientation.y, orientation.z, orientation.w]
@@ -175,6 +185,9 @@ class AeroEnergyLogger(object):
 		return ",".join(s)
 
 	def pub_setpoint_velocity(self, vx, vy, vz=0):
+		self.cur_val_list[ACT_VX] = vx
+		self.cur_val_list[ACT_VY] = vy
+		self.cur_val_list[ACT_VZ] = vz
 
 		pos_target = PositionTarget()
 		pos_target.coordinate_frame = 8 # FRAME_BODY_NED
