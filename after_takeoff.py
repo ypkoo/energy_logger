@@ -40,7 +40,7 @@ class AeroEnergyLogger(object):
 		self.ser = serial.Serial(SERIAL_PORT, 9600)
 
 		self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
-		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power, act_vx, act_vy, act_vz, mode\n")
+		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power,act_vx,act_vy,act_vz,mode\n")
 		mavros.set_namespace()
 		rospy.init_node('aero_energy_logger')
 
