@@ -201,7 +201,7 @@ class AeroEnergyLogger(object):
 if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser()
-	parser.add_arguemtn("-f", "--filename" help="filename to save the log file")
+	parser.add_argument("-f", "--filename", help="filename to save the log file", required=True)
 	args = parser.parse_args()
 	if args.filename:
 		filename = args.filename
@@ -266,9 +266,7 @@ if __name__ == '__main__':
 				# if logger.cur_state.mode == "OFFBOARD":
 				vx = random.randrange(-30,30)/10.0
 				vy = random.randrange(-30,30)/10.0
-				print "vx, vy: ", vx, vy
 				logger.set_body_velocity(vx, vy, 0.0)
-				# logger.pub_setpoint_velocity(1.0, 0.0, 0.0)
 
 				# logger.print_status()
 			except KeyboardInterrupt:
