@@ -246,25 +246,25 @@ if __name__ == '__main__':
 	while not rospy.is_shutdown():
 		line = logger.ser.readline().strip()
 
-		# print "current mode: ", logger.cur_state.mode
-		logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-		now = rospy.get_rostime()
-		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
-			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-			last_request = now 
-		else:
-			if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
-				logger.arming_client(True)
-				last_request = now 
-
-		if prev_state.armed != logger.cur_state.armed:
-			rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
-		if prev_state.mode != logger.cur_state.mode: 
-			rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
-		prev_state = logger.cur_state
+		
 
 		if line == "#":
+			print "current mode: ", logger.cur_state.mode
+			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+			now = rospy.get_rostime()
+			if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
+				logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+				last_request = now 
+			else:
+				if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
+					logger.arming_client(True)
+					last_request = now 
 
+			if prev_state.armed != logger.cur_state.armed:
+				rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
+			if prev_state.mode != logger.cur_state.mode: 
+				rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
+			prev_state = logger.cur_state
 
 			try:
 				if logger.cur_state.mode == "OFFBOARD":
@@ -296,7 +296,6 @@ if __name__ == '__main__':
 			except:
 				continue
 
-		print "current mode: ", logger.cur_state.mode
 
 	logger.set_body_velocity(0.0, 0.0, 0.0)
 	sys.exit()
