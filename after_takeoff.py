@@ -310,4 +310,5 @@ if __name__ == '__main__':
 			except:
 				continue
 
+	logger.set_body_velocity(0.0, 0.0, 0.0)
 	sys.exit()
