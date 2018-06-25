@@ -202,7 +202,7 @@ class AeroEnergyLogger(object):
 if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument("-f", "--filename", help="filename to save the log file", required=True)
+	parser.add_argument("-f", "--filename", help="filename to save the log file")
 	parser.add_argument("-a", "--action", help="action generation scheme")
 	args = parser.parse_args()
 
@@ -215,7 +215,7 @@ if __name__ == '__main__':
 		action_scheme = "FILE"
 		action_file = args.action
 		f = open(action_file)
-		lines = readlines()
+		lines = f.readlines()
 		
 		for line in lines:
 			vx, vy = line.split()
@@ -224,6 +224,7 @@ if __name__ == '__main__':
 	else:
 		action_scheme = "RANDOM"
 
+	print vx_list, vy_list
 	vx_cycle = cycle(vx_list)
 	vy_cycle = cycle(vy_list)
 
@@ -257,34 +258,37 @@ if __name__ == '__main__':
 
 	# print "vehicle armed"
 
+
 	last_request = rospy.get_rostime()
 
 	while not rospy.is_shutdown():
 		line = logger.ser.readline().strip()
-		print line
+
+		# print "current mode: ", logger.cur_state.mode
+		now = rospy.get_rostime()
+		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(1.)):
+			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+			print "set offboard"
+			last_request = now 
+		else:
+			if not logger.cur_state.armed and (now - last_request > rospy.Duration(1.)):
+				logger.arming_client(True)
+				last_request = now 
+
+		if prev_state.armed != logger.cur_state.armed:
+			rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
+		if prev_state.mode != logger.cur_state.mode: 
+			rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
+		prev_state = logger.cur_state
 
 		if line == "#":
-			print "current mode: ", logger.cur_state.mode
-			now = rospy.get_rostime()
-			if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
-				logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-				last_request = now 
-			else:
-				if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
-					logger.arming_client(True)
-					last_request = now 
-
-			if prev_state.armed != logger.cur_state.armed:
-				rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
-			if prev_state.mode != logger.cur_state.mode: 
-				rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
-			prev_state = logger.cur_state
+			
 
 
 			try:
 				if action_scheme == "FILE":
-					vx = next(vx_cycle)
-					vy = next(vx_cycle)
+					vx = float(next(vx_cycle))
+					vy = float(next(vy_cycle))
 				elif action_scheme == "RANDOM":
 					vx = random.randrange(-30,30)/10.0
 					vy = random.randrange(-30,30)/10.0
@@ -299,7 +303,6 @@ if __name__ == '__main__':
 		else:
 			try:
 				if logger.cur_state.mode == "OFFBOARD":
-					print "update!"
 					logger.update_current(int(line))
 			except KeyboardInterrupt:
 				print('interrupted!')
