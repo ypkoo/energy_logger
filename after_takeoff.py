@@ -7,6 +7,7 @@ import rospy
 import roslib
 import mavros
 import random
+import argparse
 
 import time, serial, datetime
 
@@ -37,10 +38,13 @@ class Action(object):
 
 class AeroEnergyLogger(object):
 
-	def __init__(self):
+	def __init__(self, filename=None):
 		self.ser = serial.Serial(SERIAL_PORT, 9600)
 
-		self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
+		if filename:
+			self.log_file = open("%s_log.csv" % filename, 'w')
+		else:
+			self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
 		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power\n")
 		mavros.set_namespace()
 		rospy.init_node('aero_energy_logger')
@@ -204,7 +208,6 @@ class AeroEnergyLogger(object):
 
 	def pub_local_position(self, x, y, z):
 
-		print x, y, z
 
 		pose = PoseStamped()
 		pose.pose.position.x = x
@@ -227,7 +230,16 @@ class AeroEnergyLogger(object):
 
 
 if __name__ == '__main__':
-	logger = AeroEnergyLogger()
+
+	parser = argparse.ArgumentParser()
+	parser.add_arguemtn("-f", "--filename" help="filename to save the log file")
+	args = parser.parse_args()
+	if args.filename:
+		filename = args.filename
+
+
+
+	logger = AeroEnergyLogger(filename)
 	time.sleep(3)
 	rate = rospy.Rate(20.0)
 	prev_state = logger.cur_state
