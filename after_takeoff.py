@@ -42,9 +42,9 @@ class AeroEnergyLogger(object):
 		self.ser = serial.Serial(SERIAL_PORT, 9600)
 
 		if filename:
-			self.log_file = open("%s_log.csv" % filename, 'w')
+			self.log_file = open("logs/%s_log.csv" % filename, 'w')
 		else:
-			self.log_file = open("%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
+			self.log_file = open("logs/%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
 
 		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power,act_vx,act_vy,act_vz,mode\n")
 
@@ -214,7 +214,7 @@ if __name__ == '__main__':
 	if args.action:
 		action_scheme = "FILE"
 		action_file = args.action
-		f = open(action_file)
+		f = open("actions/"+action_file)
 		lines = f.readlines()
 		
 		for line in lines:
@@ -266,12 +266,12 @@ if __name__ == '__main__':
 
 		# print "current mode: ", logger.cur_state.mode
 		now = rospy.get_rostime()
-		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(1.)):
+		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
 			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
 			print "set offboard"
 			last_request = now 
 		else:
-			if not logger.cur_state.armed and (now - last_request > rospy.Duration(1.)):
+			if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
 				logger.arming_client(True)
 				last_request = now 
 
