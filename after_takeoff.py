@@ -17,7 +17,6 @@ from sensor_msgs.msg import Imu, BatteryState
 from mavros_msgs.msg import *
 from mavros_msgs.srv import *
 
-# from mavros.srv import *
 from tf.transformations import euler_from_quaternion
 
 import sys, signal
@@ -98,6 +97,7 @@ class AeroEnergyLogger(object):
 	def velocity_callback(self, velocity):
 		self.velocity = velocity
 
+		# self.cur_val_list[VEL_X] = "{:.5f}".format(self.velocity.twist.linear.x)
 		self.cur_val_list[VEL_X] = self.velocity.twist.linear.x
 		self.cur_val_list[VEL_Y] = self.velocity.twist.linear.y
 		self.cur_val_list[VEL_Z] = self.velocity.twist.linear.z
@@ -240,24 +240,6 @@ if __name__ == '__main__':
 	while not logger.cur_state.connected:
 		rate.sleep()
 
-	# last_request = rospy.get_rostime()
-	# print "enabling offboard..."
-	# print logger.cur_state.mode
-	# while logger.cur_state.mode != "OFFBOARD":
-	# 	time.sleep(1)
-	# 	print "request offboard"
-	# 	logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-
-	# print "offboard enabled"
-
-	# print "arming..."
-	# while not logger.cur_state.armed:
-	# 	print "arming request"
-	# 	time.sleep(1)
-	# 	logger.arming_client(True)
-
-	# print "vehicle armed"
-
 
 	last_request = rospy.get_rostime()
 
@@ -265,10 +247,10 @@ if __name__ == '__main__':
 		line = logger.ser.readline().strip()
 
 		# print "current mode: ", logger.cur_state.mode
+		logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
 		now = rospy.get_rostime()
 		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
 			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-			print "set offboard"
 			last_request = now 
 		else:
 			if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
@@ -282,18 +264,18 @@ if __name__ == '__main__':
 		prev_state = logger.cur_state
 
 		if line == "#":
-			
 
 
 			try:
-				if action_scheme == "FILE":
-					vx = float(next(vx_cycle))
-					vy = float(next(vy_cycle))
-				elif action_scheme == "RANDOM":
-					vx = random.randrange(-30,30)/10.0
-					vy = random.randrange(-30,30)/10.0
-				
-				logger.set_body_velocity(vx, vy, 0.0)
+				if logger.cur_state.mode == "OFFBOARD":
+					if action_scheme == "FILE":
+						vx = float(next(vx_cycle))
+						vy = float(next(vy_cycle))
+					elif action_scheme == "RANDOM":
+						vx = random.randrange(-30,30)/10.0
+						vy = random.randrange(-30,30)/10.0
+					
+					logger.set_body_velocity(vx, vy, 0.0)
 
 			except KeyboardInterrupt:
 				print('interrupted!')
@@ -302,13 +284,19 @@ if __name__ == '__main__':
 				continue
 		else:
 			try:
-				if logger.cur_state.mode == "OFFBOARD":
-					logger.update_current(int(line))
+				# if logger.cur_state.mode == "OFFBOARD":
+				# 	logger.update_current(int(line))
+				logger.update_current(int(line))
+				logger.cur_val_list[ACT_VX] = '-'
+				logger.cur_val_list[ACT_VY] = '-'
+				logger.cur_val_list[ACT_VZ] = '-'
 			except KeyboardInterrupt:
 				print('interrupted!')
 				break
 			except:
 				continue
+
+		print "current mode: ", logger.cur_state.mode
 
 	logger.set_body_velocity(0.0, 0.0, 0.0)
 	sys.exit()
