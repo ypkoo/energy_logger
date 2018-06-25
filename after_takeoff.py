@@ -8,6 +8,7 @@ import roslib
 import mavros
 import random
 import argparse
+from itertools import cycle
 
 import time, serial, datetime
 
@@ -202,11 +203,29 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-f", "--filename", help="filename to save the log file", required=True)
+	parser.add_argument("-a", "--action", help="action generation scheme")
 	args = parser.parse_args()
+
+	vx_list = []
+	vy_list = []
+
 	if args.filename:
 		filename = args.filename
+	if args.action:
+		action_scheme = "FILE"
+		action_file = args.action
+		f = open(action_file)
+		lines = readlines()
+		
+		for line in lines:
+			vx, vy = line.split()
+			vx_list.append(vx)
+			vy_list.append(vy)
+	else:
+		action_scheme = "RANDOM"
 
-
+	vx_cycle = cycle(vx_list)
+	vy_cycle = cycle(vy_list)
 
 	logger = AeroEnergyLogger(filename)
 	time.sleep(3)
@@ -263,12 +282,15 @@ if __name__ == '__main__':
 
 
 			try:
-				# if logger.cur_state.mode == "OFFBOARD":
-				vx = random.randrange(-30,30)/10.0
-				vy = random.randrange(-30,30)/10.0
+				if action_scheme == "FILE":
+					vx = next(vx_cycle)
+					vy = next(vx_cycle)
+				elif action_scheme == "RANDOM":
+					vx = random.randrange(-30,30)/10.0
+					vy = random.randrange(-30,30)/10.0
+				
 				logger.set_body_velocity(vx, vy, 0.0)
 
-				# logger.print_status()
 			except KeyboardInterrupt:
 				print('interrupted!')
 				break
