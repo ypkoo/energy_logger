@@ -250,7 +250,6 @@ if __name__ == '__main__':
 
 		if line == "#":
 			print "current mode: ", logger.cur_state.mode
-			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
 			now = rospy.get_rostime()
 			if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
 				logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
