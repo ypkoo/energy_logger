@@ -34,6 +34,11 @@ SETPOINT_FLAG = PositionTarget.IGNORE_PX + PositionTarget.IGNORE_PY + PositionTa
 				PositionTarget.IGNORE_AFX + PositionTarget.IGNORE_AFY + PositionTarget.IGNORE_AFZ + \
 				PositionTarget.IGNORE_YAW + PositionTarget.IGNORE_YAW_RATE
 
+SETPOINT_IGNORE_ALL_FLAG = PositionTarget.IGNORE_PX + PositionTarget.IGNORE_PY + PositionTarget.IGNORE_PZ + \
+				PositionTarget.IGNORE_VX + PositionTarget.IGNORE_VY + PositionTarget.IGNORE_VZ + \
+				PositionTarget.IGNORE_AFX + PositionTarget.IGNORE_AFY + PositionTarget.IGNORE_AFZ + \
+				PositionTarget.IGNORE_YAW + PositionTarget.IGNORE_YAW_RATE
+
 
 class AeroEnergyLogger(object):
 
@@ -71,12 +76,12 @@ class AeroEnergyLogger(object):
 
 	def init_subscribers(self):
 		rospy.Subscriber(mavros.get_topic('state'), State, self.state_callback)
-		rospy.Subscriber("/mavros/local_position/velocity", TwistStamped, self.velocity_callback)
-		rospy.Subscriber("/mavros/battery", BatteryState, self.battery_state_callback)
-		rospy.Subscriber("/mavros/imu/data", Imu, self.imu_callback)
-		rospy.Subscriber("/mavros/manual_control/control", ManualControl, self.manual_control_callback)
-		rospy.Subscriber("/mavros/rc/in", RCIn, self.rc_in_callback)
-		rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.pose_callback)
+		rospy.Subscriber(mavros.get_topic('local_position', 'velocity'), TwistStamped, self.velocity_callback)
+		rospy.Subscriber(mavros.get_topic('battery'), BatteryState, self.battery_state_callback)
+		rospy.Subscriber(mavros.get_topic('imu', 'data'), Imu, self.imu_callback)
+		rospy.Subscriber(mavros.get_topic('manual_control', 'control'), ManualControl, self.manual_control_callback)
+		rospy.Subscriber(mavros.get_topic('rc', 'in'), RCIn, self.rc_in_callback)
+		rospy.Subscriber(mavros.get_topic('local_position', 'pose'), PoseStamped, self.pose_callback)
 
 	def init_services(self):
 		rospy.wait_for_service(mavros.get_topic('cmd', 'arming'))
@@ -87,7 +92,7 @@ class AeroEnergyLogger(object):
 		self.takeoff_client = rospy.ServiceProxy(mavros.get_topic('cmd', 'takeoff'), CommandTOL)
 
 	def init_publishers(self):
-		self.set_vel_pub = rospy.Publisher('/mavros/setpoint_raw/local', PositionTarget, queue_size=10)
+		self.set_vel_pub = rospy.Publisher(mavros.get_topic('setpoint_raw', 'local'), PositionTarget, queue_size=10)
 
 	def state_callback(self, state):
 		self.cur_state = state
@@ -170,6 +175,13 @@ class AeroEnergyLogger(object):
 
 		self.set_vel_pub.publish(pos_target)
 
+	def set_empty(self):
+		pos_target = PositionTarget()
+		pos_target.coordinate_frame = PositionTarget.FRAME_BODY_NED # FRAME_BODY_NED
+		pos_target.type_mask = SETPOINT_IGNORE_ALL_FLAG
+
+		self.set_vel_pub.publish(pos_target)
+
 	def pub_local_position(self, x, y, z):
 
 
@@ -230,7 +242,7 @@ if __name__ == '__main__':
 
 	logger = AeroEnergyLogger(filename)
 	time.sleep(3)
-	rate = rospy.Rate(20.0)
+	rate = rospy.Rate(50.0)
 	prev_state = logger.cur_state
 	
 	random.seed(time.time())
@@ -238,42 +250,46 @@ if __name__ == '__main__':
 	# wait for FCU connection
 	print "waiting for FCU connection..."
 	while not logger.cur_state.connected:
-		rate.sleep()
+		rate.sleep()	
 
+	print "FCU connected!"
 
 	last_request = rospy.get_rostime()
+
 
 	while not rospy.is_shutdown():
 		line = logger.ser.readline().strip()
 
 		
-
-		if line == "#":
-			print "current mode: ", logger.cur_state.mode
-			now = rospy.get_rostime()
-			if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
-				logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+		print "current mode: ", logger.cur_state.mode
+		now = rospy.get_rostime()
+		if logger.cur_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(3.)):
+			logger.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+			last_request = now 
+		else:
+			if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
+				logger.arming_client(True)
 				last_request = now 
-			else:
-				if not logger.cur_state.armed and (now - last_request > rospy.Duration(3.)):
-					logger.arming_client(True)
-					last_request = now 
 
-			if prev_state.armed != logger.cur_state.armed:
-				rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
-			if prev_state.mode != logger.cur_state.mode: 
-				rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
-			prev_state = logger.cur_state
+		if prev_state.armed != logger.cur_state.armed:
+			rospy.loginfo("Vehicle armed: %r" % logger.cur_state.armed)
+		if prev_state.mode != logger.cur_state.mode: 
+			rospy.loginfo("Current mode: %s" % logger.cur_state.mode)
+		prev_state = logger.cur_state
+		
+		if line == "#":
+			
 
 			try:
 				if logger.cur_state.mode == "OFFBOARD":
+					print "give action"
 					if action_scheme == "FILE":
 						vx = float(next(vx_cycle))
 						vy = float(next(vy_cycle))
 					elif action_scheme == "RANDOM":
 						vx = random.randrange(-30,30)/10.0
 						vy = random.randrange(-30,30)/10.0
-					
+						
 					logger.set_body_velocity(vx, vy, 0.0)
 
 			except KeyboardInterrupt:
@@ -285,6 +301,7 @@ if __name__ == '__main__':
 			try:
 				# if logger.cur_state.mode == "OFFBOARD":
 				# 	logger.update_current(int(line))
+				print "logger called"
 				logger.update_current(int(line))
 				logger.cur_val_list[ACT_VX] = '-'
 				logger.cur_val_list[ACT_VY] = '-'
