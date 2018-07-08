@@ -1,0 +1,4 @@
+logs/*
+logs_old/*
+actions/*
+*.pyc
