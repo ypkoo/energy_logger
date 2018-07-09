@@ -95,7 +95,6 @@ if __name__ == '__main__':
 				logger.update_raw_power_sum()
 				print "write log"
 				logger.write_log()
-				print "give action"
 				if action_scheme == "FILE":
 					vx = float(next(vx_cycle))
 					vy = float(next(vy_cycle))

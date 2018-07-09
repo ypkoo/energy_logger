@@ -27,8 +27,30 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 SERIAL_PORT = "/dev/ttyACM0"
-FIELD_NUM = 22
-TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, RC0, RC1, RC2, RC3, VOL, CUR_RAW, CUR, POWER, ACT_VX, ACT_VY, ACT_VZ, MODE = range(FIELD_NUM)
+FIELD_NUM = 16
+TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, VOL, ENERGY, ACT_VX, ACT_VY, ACT_VZ, MODE = range(FIELD_NUM)
+LOG_ITEMS = [TIMESTAMP, VEL_X, VEL_Y, VEL_Z, ACC_X, ACC_Y, ACC_Z, ROLL, PITCH, YAW, ENERGY, ACT_VX, ACT_VY, ACT_VZ, MODE]
+
+# TODO
+HEADER_STRINGS = {
+	TIMESTAMP: "timestamp",
+	VEL_X: "vel_x",
+	VEL_Y: "vel_y",
+	VEL_Z: "vel_z",
+	ACC_X: "acc_x",
+	ACC_Y: "acc_y",
+	ACC_Z: "acc_z",
+	ROLL: "roll",
+	PITCH: "pitch",
+	YAW: "yaw",
+	VOL: "vol",
+	ENERGY: "energy",
+	ACT_VX: "act_vx",
+	ACT_VY: "act_vy",
+	ACT_VZ: "act_vz",
+	MODE: "mode"
+
+}
 
 SETPOINT_FLAG = PositionTarget.IGNORE_PX + PositionTarget.IGNORE_PY + PositionTarget.IGNORE_PZ + \
 				PositionTarget.IGNORE_AFX + PositionTarget.IGNORE_AFY + PositionTarget.IGNORE_AFZ + \
@@ -50,7 +72,8 @@ class AeroEnergyLogger(object):
 		else:
 			self.log_file = open("logs/%s_log.csv" % datetime.datetime.now().strftime('%m%d%H%M%S'), 'w')
 
-		self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,cur_raw,cur,power,act_vx,act_vy,act_vz,mode\n")
+		# self.log_file.write("timestamp,vel_x,vel_y,vel_z,acc_x,acc_y,acc_z,roll,pitch,yaw,rc0,rc1,rc2,rc3,vol,energy,act_vx,act_vy,act_vz,mode\n")
+		self.log_file.write(",".join([HEADER_STRINGS[i] for i in LOG_ITEMS])+"\n")
 
 		mavros.set_namespace()
 		rospy.init_node('aero_energy_logger')
@@ -64,6 +87,14 @@ class AeroEnergyLogger(object):
 		self.pose = PoseStamped()
 
 		self.cur_val_list = [0] * FIELD_NUM
+		self.log_val_list = [0] * FIELD_NUM
+
+		self.last_raw_power = 0
+		self.raw_power_sum = 0
+
+		self.last_timestamp = 0
+
+
 
 		print "initialize subscribers..."
 		self.init_subscribers()
@@ -157,10 +188,53 @@ class AeroEnergyLogger(object):
 		log_str = ",".join(self.cur_val_list)
 		self.log_file.write("%s\n" % log_str)
 
+	def update_raw_power_sum(self, raw_current_value=None):
+		now = time.time()
+		elapsed_time = now - self.last_timestamp
+		self.last_timestamp = now
+
+
+		self.raw_power_sum = self.raw_power_sum + self.last_raw_power
+		# self.raw_power_sum = self.raw_power_sum + self.last_raw_power*float(elapsed_time)
+		if raw_current_value:
+			self.last_raw_power = float(self.cur_val_list[VOL])*float(raw_current_value)
+			# self.last_raw_power = float(raw_current_value)
+
+
+		# if raw_current_value:
+		# 	print "raw_current_value: " + str(raw_current_value) + " raw_power_sum: " + str(self.raw_power_sum)
+		# else:
+		# 	print "raw_current_value: " + "none" + " raw_power_sum: " + str(self.raw_power_sum)
+
+	def write_log(self):
+		self.log_val_list[TIMESTAMP] = time.time() - self.start_time
+		self.log_val_list[ENERGY] = self.convert_to_amp(self.raw_power_sum)
+		# self.cur_val_list[ENERGY] = self.raw_power_sum
+		
+
+		self.log_val_list = [str(x) for x in self.log_val_list]
+
+		log_str = ",".join([self.log_val_list[i] for i in LOG_ITEMS])
+		# log_str = ",".join(self.cur_val_list)
+
+		print "cur", self.cur_val_list
+		print "log", self.log_val_list
+		self.log_file.write("%s\n" % log_str)
+
+		self.reset_raw_power_sum()
+
+	def reset_raw_power_sum(self):
+		self.raw_power_sum = 0
+		self.last_raw_power = 0
+
 	def set_body_velocity(self, vx, vy, vz=0):
+		self.cur_val_list[TIMESTAMP] = time.time() - self.start_time
+
 		self.cur_val_list[ACT_VX] = vx
 		self.cur_val_list[ACT_VY] = vy
 		self.cur_val_list[ACT_VZ] = vz
+
+		self.log_val_list = list(self.cur_val_list)
 
 		pos_target = PositionTarget()
 		pos_target.coordinate_frame = PositionTarget.FRAME_BODY_NED # FRAME_BODY_NED
@@ -208,3 +282,6 @@ class AeroEnergyLogger(object):
 
 	def disarm(self):
 		self.arming_client(False)
+
+	def convert_to_amp(self, raw_value):
+		return ((raw_value / 1024.0)*5000 - 2500) / 100

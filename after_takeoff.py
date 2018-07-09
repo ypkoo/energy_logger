@@ -7,7 +7,7 @@ import random
 import argparse
 from itertools import cycle
 import time
-from aero_energy_logger import AeroEnergyLogger
+from aero_energy_logger import *
 import rospy
 import sys, signal
 
@@ -91,16 +91,17 @@ if __name__ == '__main__':
 			
 
 			try:
-				if logger.cur_state.mode == "OFFBOARD":
-					print "give action"
-					if action_scheme == "FILE":
-						vx = float(next(vx_cycle))
-						vy = float(next(vy_cycle))
-					elif action_scheme == "RANDOM":
-						vx = random.randrange(-30,30)/10.0
-						vy = random.randrange(-30,30)/10.0
-						
-					logger.set_body_velocity(vx, vy, 0.0)
+				# if logger.cur_state.mode == "OFFBOARD":
+				
+				print "give action"
+				if action_scheme == "FILE":
+					vx = float(next(vx_cycle))
+					vy = float(next(vy_cycle))
+				elif action_scheme == "RANDOM":
+					vx = random.randrange(-30,30)/10.0
+					vy = random.randrange(-30,30)/10.0
+					
+				logger.set_body_velocity(vx, vy, 0.0)
 
 			except KeyboardInterrupt:
 				print('interrupted!')
